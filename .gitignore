@@ -1,0 +1,14 @@
+
+.idea
+.DS_Store
+
+/**/main
+/**/*.log
+
+/**/**/bin
+
+/**/**/kubeconfig.yaml
+/z_examples/k8s_client.go
+/manager_v1/cmd/controller/start.sh
+/z_etc/kubernetes/pki/
+/case_user_config/tester_config
