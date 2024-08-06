@@ -3,13 +3,14 @@ package main
 import (
 	"context"
 	"fmt"
-	"log"
+	"net/http"
 	"time"
 
 	"cuelang.org/go/cue"
 	"cuelang.org/go/cue/cuecontext"
 	"cuelang.org/go/tools/flow"
 	"github.com/gin-gonic/gin"
+	"k8s.io/klog/v2"
 )
 
 const tasks = `
@@ -34,19 +35,58 @@ func main() {
 	cv := cc.CompileString(tasks)
 	// cue 工作流对象
 	regFlow := flow.New(nil, cv, regFlowFunc)
-	go func() {
-		if err := regFlow.Run(context.TODO()); err != nil {
-			log.Fatalln(err)
-		}
-	}()
+	flowCtx, flowCancel := context.WithCancel(context.Background())
 
 	regFlow.Tasks()[0].State()
 	r := gin.New()
 	r.LoadHTMLGlob("workflow/*")
+
+	// 1、访问主页，回去当前的未执行的工作流的状态信息
+	// 2、启动工作流，重定向会主页，刷新获取当前工作流状态
+	// 3、重置工作流，则重新创建flow对象
+	// 4、取消，则退出工作流
+
 	r.GET("/", func(c *gin.Context) {
 		c.HTML(200, "index.html", gin.H{"tasks": regFlow.Tasks()})
 	})
-	r.Run(":8080")
+
+	r.GET("/reset", func(c *gin.Context) {
+		regFlow = flow.New(nil, cv, regFlowFunc)
+		c.Redirect(http.StatusFound, "/")
+		return
+	})
+
+	r.GET("/cancel", func(c *gin.Context) {
+		flowCancel()
+		c.Redirect(http.StatusFound, "/")
+		return
+	})
+
+	r.POST("/", func(c *gin.Context) {
+
+		go func() {
+			err := regFlow.Run(flowCtx)
+			if err != nil {
+				klog.Errorf("regFlow err: %v", err)
+				c.JSONP(200, gin.H{
+					"code": 5000000,
+					"msg":  err.Error(),
+					"data": nil,
+				})
+				return
+			}
+		}()
+
+		c.Redirect(http.StatusFound, "/")
+
+		return
+	})
+
+	err := r.Run(":8080")
+	if err != nil {
+		klog.Fatalf("r.Run err: %v", err)
+		return
+	}
 
 }
 func regFlowFunc(v cue.Value) (flow.Runner, error) {
