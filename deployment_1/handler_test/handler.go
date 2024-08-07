@@ -1,15 +1,19 @@
 package main
 
 import (
+	"bytes"
 	"context"
+	encodingjson "encoding/json"
 
 	"cuelang.org/go/cue"
 	"cuelang.org/go/cue/cuecontext"
 	"cuelang.org/go/cue/load"
 	"cuelang.org/go/tools/flow"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/klog/v2"
 
 	"github.com/penk110/k8s_operator/deployment_1/handler"
+	"github.com/penk110/k8s_operator/k8s_client"
 )
 
 const (
@@ -17,6 +21,27 @@ const (
 )
 
 func main() {
+
+	apiGroupResources, err := k8s_client.RestNapper()
+	if err != nil {
+		klog.Errorf("RestNapper err: %v", err)
+		return
+	}
+
+	restMapping, err := apiGroupResources.RESTMapping(schema.GroupKind{
+		Group: "apps",
+		Kind:  "Deployment",
+	})
+	if err != nil {
+		klog.Errorf("RESTMapping err: %v", err)
+		return
+	}
+	restMappingJson, _ := encodingjson.Marshal(restMapping)
+	var prettyJSON bytes.Buffer
+	_ = encodingjson.Indent(&prettyJSON, restMappingJson, "", "  ")
+
+	klog.Infof("restMapping: %v", prettyJSON.String())
+
 	inst := load.Instances([]string{K8SFlowTpl}, nil)[0]
 
 	cc := cuecontext.New()
@@ -27,9 +52,10 @@ func main() {
 	}
 	k8sFlow := flow.New(flowConfig, cv, handler.Handler)
 
-	err := k8sFlow.Run(context.TODO())
+	err = k8sFlow.Run(context.TODO())
 	if err != nil {
 		klog.Errorf("k8sFlow err: %v", err)
 		return
 	}
+
 }
