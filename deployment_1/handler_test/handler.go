@@ -22,7 +22,7 @@ const (
 
 func main() {
 
-	apiGroupResources, err := k8s_client.RestNapper()
+	apiGroupResources, err := k8s_client.RestMapper()
 	if err != nil {
 		klog.Errorf("RestNapper err: %v", err)
 		return
@@ -58,4 +58,11 @@ func main() {
 		return
 	}
 
+	k8sJson, err := k8sFlow.Value().MarshalJSON()
+
+	err = k8s_client.Apply(k8sJson, k8s_client.GetConfig(), apiGroupResources)
+	if err != nil {
+		klog.Errorf("Apply err: %v", err)
+		return
+	}
 }
